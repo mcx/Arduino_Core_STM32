@@ -97,37 +97,59 @@ ErrorStatus LL_PWR_DeInit(void)
 #if defined(GPIOD)
   LL_PWR_WriteReg(PUCRD, PWR_PUCRD_RESET_VALUE);
   LL_PWR_WriteReg(PDCRD, PWR_PDCRD_RESET_VALUE);
-#endif
+#endif /* GPIOD */
   LL_PWR_WriteReg(PUCRE, PWR_PUCRE_RESET_VALUE);
   LL_PWR_WriteReg(PDCRE, PWR_PDCRE_RESET_VALUE);
   LL_PWR_WriteReg(PUCRH, PWR_PUCRH_RESET_VALUE);
   LL_PWR_WriteReg(PDCRH, PWR_PDCRH_RESET_VALUE);
   LL_PWR_WriteReg(C2CR1, PWR_C2CR1_RESET_VALUE);
   LL_PWR_WriteReg(C2CR3, PWR_C2CR3_RESET_VALUE);
-  
+
   /* Clear all flags */
+  #if defined(PWR_CR3_E802A) && defined(PWR_CR5_SMPSEN)
+LL_PWR_WriteReg(SCR,
+                LL_PWR_SCR_CC2HF
+                | LL_PWR_SCR_CBLEAF
+                | LL_PWR_SCR_CCRPEF
+                | LL_PWR_SCR_C802AF
+                | LL_PWR_SCR_C802WUF
+                | LL_PWR_SCR_CBLEWUF
+                | LL_PWR_SCR_CBORHF
+                | LL_PWR_SCR_CSMPSFBF
+                | LL_PWR_SCR_CWUF);
+#elif defined(PWR_CR3_E802A)
   LL_PWR_WriteReg(SCR,
-                    LL_PWR_SCR_CC2HF
-                  | LL_PWR_SCR_CBLEAF
-                  | LL_PWR_SCR_CCRPEF
-#if defined(PWR_CR3_E802A)
-                  | LL_PWR_SCR_C802AF
-                  | LL_PWR_SCR_C802WUF
+                LL_PWR_SCR_CC2HF
+                | LL_PWR_SCR_CBLEAF
+                | LL_PWR_SCR_CCRPEF
+                | LL_PWR_SCR_C802AF
+                | LL_PWR_SCR_C802WUF
+                | LL_PWR_SCR_CBLEWUF
+                | LL_PWR_SCR_CWUF);
+#elif defined(PWR_CR5_SMPSEN)
+  LL_PWR_WriteReg(SCR,
+                LL_PWR_SCR_CC2HF
+                | LL_PWR_SCR_CBLEAF
+                | LL_PWR_SCR_CCRPEF
+                | LL_PWR_SCR_CBLEWUF
+                | LL_PWR_SCR_CBORHF
+                | LL_PWR_SCR_CSMPSFBF
+                | LL_PWR_SCR_CWUF);
+#else
+  LL_PWR_WriteReg(SCR,
+                LL_PWR_SCR_CC2HF
+                | LL_PWR_SCR_CBLEAF
+                | LL_PWR_SCR_CCRPEF
+                | LL_PWR_SCR_CBLEWUF
+                | LL_PWR_SCR_CWUF);
 #endif
-                  | LL_PWR_SCR_CBLEWUF
-#if defined(PWR_CR5_SMPSEN)
-                  | LL_PWR_SCR_CBORHF
-                  | LL_PWR_SCR_CSMPSFBF
-#endif
-                  | LL_PWR_SCR_CWUF
-                 );
-  
+
   LL_PWR_WriteReg(EXTSCR,
-                    LL_PWR_EXTSCR_CCRPF
+                  LL_PWR_EXTSCR_CCRPF
                   | LL_PWR_EXTSCR_C2CSSF
                   | LL_PWR_EXTSCR_C1CSSF
                  );
-  
+
   return SUCCESS;
 }
 
@@ -142,7 +164,7 @@ ErrorStatus LL_PWR_DeInit(void)
 /**
   * @}
   */
-#endif /* defined(PWR) */
+#endif /* PWR */
 /**
   * @}
   */

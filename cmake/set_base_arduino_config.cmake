@@ -22,6 +22,7 @@ target_link_libraries(base_config INTERFACE
 	gcc
 )
 target_compile_definitions(base_config INTERFACE
+	USE_HAL_DRIVER
 	USE_FULL_LL_DRIVER
 	ARDUINO_ARCH_STM32
 )
@@ -54,11 +55,10 @@ target_include_directories(base_config INTERFACE
 	"${BUILD_CORE_PATH}"
 	"${BUILD_CORE_PATH}/avr"
 	"${BUILD_CORE_PATH}/stm32"
-	"${BUILD_CORE_PATH}/stm32/LL"
-	"${BUILD_CORE_PATH}/stm32/usb"
-	"${BUILD_CORE_PATH}/stm32/OpenAMP"
-	"${BUILD_CORE_PATH}/stm32/usb/hid"
-	"${BUILD_CORE_PATH}/stm32/usb/cdc"
+	"${BUILD_LIB_PATH}/SrcWrapper/inc"
+	"${BUILD_LIB_PATH}/SrcWrapper/inc/LL"
+	"${BUILD_LIB_PATH}/USBDevice/inc"
+	"${BUILD_LIB_PATH}/VirtIO/inc"
 	"${BUILD_SYSTEM_PATH}/Middlewares/ST/STM32_USB_Device_Library/Core/Inc"
 	"${BUILD_SYSTEM_PATH}/Middlewares/ST/STM32_USB_Device_Library/Core/Src"
 	"${CMSIS5_PATH}/CMSIS/DSP/Include"

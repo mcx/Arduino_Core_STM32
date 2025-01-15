@@ -2,10 +2,14 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-#ifdef STM32G0xx
+#ifdef STM32C0xx
+  #include "stm32c0xx_hal_fdcan.c"
+#elif STM32G0xx
   #include "stm32g0xx_hal_fdcan.c"
 #elif STM32G4xx
   #include "stm32g4xx_hal_fdcan.c"
+#elif STM32H5xx
+  #include "stm32h5xx_hal_fdcan.c"
 #elif STM32H7xx
   #include "stm32h7xx_hal_fdcan.c"
 #elif STM32L5xx

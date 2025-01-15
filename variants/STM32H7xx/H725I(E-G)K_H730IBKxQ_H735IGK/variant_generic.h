@@ -132,7 +132,7 @@
 #define PH2                     PIN_A28
 #define PH3                     PIN_A29
 #define PH4                     PIN_A30
-#define PH5                     PIN_A31
+#define PH5                     117
 #define PH6                     118
 #define PH7                     119
 #define PH8                     120
@@ -143,10 +143,10 @@
 #define PH13                    125
 #define PH14                    126
 #define PH15                    127
-#define PA0_C                   PIN_A32
-#define PA1_C                   PIN_A33
-#define PC2_C                   PIN_A34
-#define PC3_C                   PIN_A35
+#define PA0_C                   PIN_A31
+#define PA1_C                   PIN_A32
+#define PC2_C                   PIN_A33
+#define PC3_C                   PIN_A34
 
 // Alternate pins number
 #define PA0_ALT1                (PA0   | ALT1)
@@ -187,9 +187,7 @@
 #define PB6_ALT2                (PB6   | ALT2)
 #define PB7_ALT1                (PB7   | ALT1)
 #define PB8_ALT1                (PB8   | ALT1)
-#define PB8_ALT2                (PB8   | ALT2)
 #define PB9_ALT1                (PB9   | ALT1)
-#define PB9_ALT2                (PB9   | ALT2)
 #define PB14_ALT1               (PB14  | ALT1)
 #define PB14_ALT2               (PB14  | ALT2)
 #define PB15_ALT1               (PB15  | ALT1)
@@ -204,9 +202,7 @@
 #define PC4_ALT1                (PC4   | ALT1)
 #define PC5_ALT1                (PC5   | ALT1)
 #define PC6_ALT1                (PC6   | ALT1)
-#define PC6_ALT2                (PC6   | ALT2)
 #define PC7_ALT1                (PC7   | ALT1)
-#define PC7_ALT2                (PC7   | ALT2)
 #define PC8_ALT1                (PC8   | ALT1)
 #define PC9_ALT1                (PC9   | ALT1)
 #define PC10_ALT1               (PC10  | ALT1)
@@ -223,7 +219,7 @@
 
 #define NUM_DIGITAL_PINS        132
 #define NUM_DUALPAD_PINS        4
-#define NUM_ANALOG_INPUTS       36
+#define NUM_ANALOG_INPUTS       35
 
 // On-board LED pin number
 #ifndef LED_BUILTIN

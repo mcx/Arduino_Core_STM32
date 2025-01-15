@@ -33,16 +33,25 @@ static const uint8_t MASTER_ADDRESS = 0x01;
 
 // Constructors ////////////////////////////////////////////////////////////////
 
-TwoWire::TwoWire()
-{
-  _i2c.sda = digitalPinToPinName(SDA);
-  _i2c.scl = digitalPinToPinName(SCL);
-}
-
 TwoWire::TwoWire(uint32_t sda, uint32_t scl)
 {
+  memset((void *)&_i2c, 0, sizeof(_i2c));
   _i2c.sda = digitalPinToPinName(sda);
   _i2c.scl = digitalPinToPinName(scl);
+
+  txBuffer = nullptr;
+  txBufferAllocated = 0;
+  rxBuffer = nullptr;
+  rxBufferAllocated = 0;
+}
+
+/**
+  * @brief  TwoWire destructor
+  * @retval None
+  */
+TwoWire::~TwoWire()
+{
+  end();
 }
 
 // Public Methods //////////////////////////////////////////////////////////////
@@ -63,14 +72,10 @@ void TwoWire::begin(uint8_t address, bool generalCall, bool NoStretchMode)
 {
   rxBufferIndex = 0;
   rxBufferLength = 0;
-  rxBuffer = nullptr;
-  rxBufferAllocated = 0;
   resetRxBuffer();
 
   txDataSize = 0;
   txAddress = 0;
-  txBuffer = nullptr;
-  txBufferAllocated = 0;
   resetTxBuffer();
 
   _i2c.__this = (void *)this;
@@ -87,7 +92,7 @@ void TwoWire::begin(uint8_t address, bool generalCall, bool NoStretchMode)
 
   recoverBus(); // in case I2C bus (device) is stuck after a reset for example
 
-  i2c_custom_init(&_i2c, 100000, I2C_ADDRESSINGMODE_7BIT, ownAddress);
+  i2c_init(&_i2c, 100000, ownAddress);
 
   if (_i2c.isMaster == 0) {
     // i2c_attachSlaveTxEvent(&_i2c, reinterpret_cast<void(*)(i2c_t*)>(&TwoWire::onRequestService));
@@ -106,11 +111,15 @@ void TwoWire::begin(int address, bool generalCall, bool NoStretchMode)
 void TwoWire::end(void)
 {
   i2c_deinit(&_i2c);
-  free(txBuffer);
-  txBuffer = nullptr;
+  if (txBuffer != nullptr) {
+    free(txBuffer);
+    txBuffer = nullptr;
+  }
   txBufferAllocated = 0;
-  free(rxBuffer);
-  rxBuffer = nullptr;
+  if (rxBuffer != nullptr) {
+    free(rxBuffer);
+    rxBuffer = nullptr;
+  }
   rxBufferAllocated = 0;
 }
 

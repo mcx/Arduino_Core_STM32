@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
-import pathlib
 import argparse
-
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-
 from parse_boards import parse_file
 
 
@@ -15,13 +13,17 @@ def get_fpconf(config):
 
 
 def boardstxt_filter(key):
-    # Remove menu entry labels
+    # Remove menu entry labels and oopenocd config if any
     # In our data model, they conflict with the actual configuration
     # they are associated to
     # i.e. Nucleo_144.menu.pnum.NUCLEO_F207ZG would be both
     # a string ("Nucleo F207ZG")
     # and a dict (.build.variant_h=..., .upload.maximum_size=...)
 
+    if key[-1] == "svd_file":
+        return True
+    if len(key) >= 5 and key[-2] == "scripts" and key[-3] == "openocd":
+        return True
     if key[0] == "menu":
         # menu.xserial=U(S)ART support
         return True
@@ -40,9 +42,10 @@ def boardstxt_filter(key):
 
 
 def platformtxt_filter(key):
-    # reject everything but build.**
-    # and also build.info (that's specific to the build system, we'll hard-code it)
-    # we don't need anything else from platform.txt
+    # reject everything except build.**, vid.** and pid.**
+    # Note that build.info is also rejected
+    # (it is specific to the build system, it will be hard-coded)
+    # nothing else is needed from platform.txt
     # +additional stuff might confuse later parts of the script
     # e.g.:
 
@@ -53,6 +56,8 @@ def platformtxt_filter(key):
     # compiler.warning_flags.all=-Wall -Wextra
 
     if key[0] == "build" and key[1] != "info":
+        return False
+    if key[0] == "vid" or key[0] == "pid":
         return False
     return True
 
@@ -76,26 +81,26 @@ def regenerate_template(config, infile, outfile):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-b", "--boards", type=pathlib.Path, required=True, help="path to boards.txt"
+        "-b", "--boards", type=Path, required=True, help="path to boards.txt"
     )
     parser.add_argument(
         "-p",
         "--platform",
-        type=pathlib.Path,
+        type=Path,
         required=True,
         help="path to platform.txt",
     )
     parser.add_argument(
         "-t",
         "--template",
-        type=pathlib.Path,
+        type=Path,
         required=True,
         help="path to the jinja template",
     )
     parser.add_argument(
         "-o",
         "--outfile",
-        type=pathlib.Path,
+        type=Path,
         required=True,
         help="path to the cmake database to generate",
     )
@@ -103,18 +108,18 @@ if __name__ == "__main__":
     shargs = parser.parse_args()
 
     platformtxt_cfg = parse_file(shargs.platform, reject=platformtxt_filter)
-    platformtxt_cfg = {"build": platformtxt_cfg["build"]}  # whitelist what we need
+    # whitelist what we need
+    platformtxt_cfg = {
+        "build": platformtxt_cfg["build"],
+        "vid": platformtxt_cfg["vid"],
+        "pid": platformtxt_cfg["pid"],
+    }
 
     boardstxt_cfg = parse_file(shargs.boards, reject=boardstxt_filter)
     del boardstxt_cfg["menu"]  # blacklist what we don't need
 
     # these are optional features to be picked out by the user
-    BOARD_FEATURES = [
-        "enable_virtio",
-        "enable_usb",
-        "usb_speed",
-        "xSerial",
-    ]
+    BOARD_FEATURES = ["enable_virtio", "enable_usb", "usb_speed", "xSerial"]
 
     allboards = dict()
 

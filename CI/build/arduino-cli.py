@@ -74,12 +74,11 @@ board_options = {}  # key: board name, value: options
 sketch_options = {}  # key: sketch pattern, value: options
 na_sketch_pattern = {}  # key: board name, value: sketch pattern list
 
-all_warnings = False
-
 # Counter
 nb_build_passed = 0
 nb_build_failed = 0
 nb_build_skipped = 0
+nb_warnings = 0
 
 # Timing
 full_buildTime = time.time()
@@ -91,11 +90,11 @@ skip_count = 0
 # error or fatal error
 fork_pattern = re.compile(r"^Error during build: fork/exec")
 error_pattern = re.compile(r":\d+:\d*:?\s.*error:\s|^Error:|fatal error:")
-ld_pattern = re.compile("arm-none-eabi/bin/ld\.?e?x?e?:")
+ld_pattern = re.compile(r"arm-none-eabi/bin/ld\.?e?x?e?:")
 overflow_pattern = re.compile(
     r"(will not fit in |section .+ is not within )?region( .+ overflowed by [\d]+ bytes)?"
 )
-
+warning_pattern = re.compile(r"warning: .+LOAD segment with RWX permissions")
 # format
 build_format_header = "| {:^8} | {:42} | {:^10} | {:^7} |"
 build_format_result = "| {:^8} | {:42} | {:^19} | {:^6.2f}s |"
@@ -297,16 +296,27 @@ def check_config():
         else:
             cli_config = json.loads(output)
             if cli_config is not None:
-                if cli_config["directories"]["data"] is not None:
-                    sketches_path_list.append(Path(cli_config["directories"]["data"]))
+                # Since arduino-cli 1.x new level "config"
+                if "config" in cli_config.keys():
+                    cli_config = cli_config["config"]
+                # Since arduino-cli 1.x config init does not create full config
+                if "directories" in cli_config.keys():
+                    if "data" in cli_config["directories"].keys():
+                        if cli_config["directories"]["data"] is not None:
+                            sketches_path_list.append(
+                                Path(cli_config["directories"]["data"])
+                            )
+                    else:
+                        print("No data directory")
+                    if "user" in cli_config["directories"].keys():
+                        if cli_config["directories"]["user"] is not None:
+                            sketches_path_list.append(
+                                Path(cli_config["directories"]["user"])
+                            )
+                    else:
+                        print("No user directory!")
                 else:
-                    print("No data directory")
-                    quit(1)
-                if cli_config["directories"]["user"] is not None:
-                    sketches_path_list.append(Path(cli_config["directories"]["user"]))
-                else:
-                    print("No user directory!")
-                    quit(1)
+                    print("No directories in config!")
                 # Fill search_path_list to avoid search on the same path
                 sorted_spl = sorted(set(sketches_path_list))
                 search_path_list = []
@@ -430,10 +440,10 @@ def manage_inos():
         ino_file = Path(args.ino)
         if ino_file.exists():
             # Store only the path
-            if ino_file.is_file(args.ino):
+            if ino_file.is_file():
                 sketch_list.append(ino_file.parent)
             else:
-                sketch_list.append(args.ino)
+                sketch_list.append(ino_file)
         else:
             for path in sketches_path_list:
                 fp = path / ino_file
@@ -526,7 +536,11 @@ def find_board():
         print(e.stdout.decode("utf-8"))
         quit(e.returncode)
     else:
-        fqbn_list_tmp = [board["fqbn"] for board in json.loads(output)]
+        boards = json.loads(output)
+        # Since arduino-cli 1.x new level "boards" and is a dict
+        if type(boards) is dict:
+            boards = boards["boards"]
+        fqbn_list_tmp = [board["fqbn"] for board in boards]
         if not len(fqbn_list_tmp):
             print(f"No boards found for {arduino_platform}")
             quit(1)
@@ -575,11 +589,18 @@ def find_board():
 def check_status(status, build_conf, boardKo, nb_build_conf):
     global nb_build_passed
     global nb_build_failed
+    global nb_warnings
     sketch_name = build_conf[idx_cmd][-1].name
 
     if status[1] == 0:
         result = fsucc
         nb_build_passed += 1
+        # Check warnings
+        logFile = build_conf[idx_log] / f"{sketch_name}.log"
+        for i, line in enumerate(open(logFile)):
+            if warning_pattern.search(line):
+                nb_warnings += 1
+                print(f"Warning: {line}")
     elif status[1] == 1:
         # Check if failed due to a region overflowed
         logFile = build_conf[idx_log] / f"{sketch_name}.log"
@@ -593,7 +614,11 @@ def check_status(status, build_conf, boardKo, nb_build_conf):
             elif ld_pattern.search(line):
                 # If one ld line is not for region overflowed --> failed
                 if overflow_pattern.search(line) is None:
-                    error_found = True
+                    if warning_pattern.search(line):
+                        nb_warnings += 1
+                        print(f"Warning: {line}")
+                    else:
+                        error_found = True
                 else:
                     overflow_found = True
             if error_found:
@@ -660,8 +685,12 @@ def log_sketch_build_result(sketch, boardKo, boardSkipped):
 def log_final_result():
     # Also equal to len(board_fqbn) * len(sketch_list)
     nb_build_total = nb_build_passed + nb_build_failed
-    stat_passed = round(nb_build_passed * 100.0 / nb_build_total, 2)
-    stat_failed = round(nb_build_failed * 100.0 / nb_build_total, 2)
+    if nb_build_total != 0:
+        stat_passed = round(nb_build_passed * 100.0 / nb_build_total, 2)
+        stat_failed = round(nb_build_failed * 100.0 / nb_build_total, 2)
+    else:
+        stat_passed = 0
+        stat_failed = 0
     duration = str(timedelta(seconds=time.time() - full_buildTime))
 
     # Log file
@@ -673,6 +702,8 @@ def log_final_result():
         sfail = f"{nb_build_failed} failed ({stat_failed}%)"
         sskip = f"{nb_build_skipped} skipped)"
         f.write(f"{ssucc}, {sfail}  of {nb_build_total} builds ({sskip})\n")
+        if nb_warnings:
+            f.write(f"Total warning to remove: {nb_warnings}\n")
         f.write(f"Ends {time.strftime('%A %d %B %Y %H:%M:%S')}\n")
         f.write(f"Duration: {duration}\n")
         f.write(f"Logs are available here:\n{output_dir}\n")
@@ -683,6 +714,8 @@ def log_final_result():
     sfail = f"{nb_build_failed} {ffail} ({stat_failed}%)"
     sskip = f"{nb_build_skipped} {fskip}"
     print(f"Builds Summary: {ssucc}, {sfail} of {nb_build_total} builds ({sskip})")
+    if nb_warnings:
+        print(f"Total warning to remove: {nb_warnings}")
     print(f"Duration: {duration}")
     print("Logs are available here:")
     print(output_dir)

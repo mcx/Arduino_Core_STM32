@@ -33,7 +33,7 @@ function(get_host OUTVAR)
     if (${HOST_ARCH} MATCHES "^(AMD64|X86_64|x64|I386|IA32|x86|I686)$")
       set(${OUTVAR} "i686-mingw32" PARENT_SCOPE)
     endif()
-  elseif (${HOST_OS} STREQUAL "Darwin")
+  elseif (${HOST_OS} STREQUAL "Darwin" OR ${HOST_OS} STREQUAL "macOS")
     if (${HOST_ARCH} MATCHES "^(AMD64|X86_64|x64)$")
       set(${OUTVAR} "x86_64-apple-darwin" PARENT_SCOPE)
     endif()
@@ -58,6 +58,13 @@ function(get_target_url JSONARR OUT_URL OUT_SHA)
 endfunction()
 
 function(declare_deps CORE_VERSION)
+
+  # Prevent warnings in CMake>=3.24 regarding ExternalProject_Add()
+  # cf. https://cmake.org/cmake/help/latest/policy/CMP0135.html
+  if (POLICY CMP0135)
+    cmake_policy(SET CMP0135 OLD)
+  endif()
+
   file(REAL_PATH "${DL_DIR}/package_stmicroelectronics_index.json" JSONFILE)
   if (NOT EXISTS ${JSONFILE})
     file(DOWNLOAD "${JSONCONFIG_URL}" ${JSONFILE})
