@@ -6,6 +6,17 @@
   *          This file provides a generic firmware to drive SRAM memories
   *          mounted as external device.
   *
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2016 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
   @verbatim
   ==============================================================================
                           ##### How to use this driver #####
@@ -72,15 +83,15 @@
       and a pointer to the user callback function.
 
       Use function HAL_SRAM_UnRegisterCallback() to reset a callback to the default
-      weak (surcharged) function. It allows to reset following callbacks:
+      weak (overridden) function. It allows to reset following callbacks:
         (+) MspInitCallback    : SRAM MspInit.
         (+) MspDeInitCallback  : SRAM MspDeInit.
       This function) takes as parameters the HAL peripheral handle and the Callback ID.
 
       By default, after the HAL_SRAM_Init and if the state is HAL_SRAM_STATE_RESET
-      all callbacks are reset to the corresponding legacy weak (surcharged) functions.
+      all callbacks are reset to the corresponding legacy weak (overridden) functions.
       Exception done for MspInit and MspDeInit callbacks that are respectively
-      reset to the legacy weak (surcharged) functions in the HAL_SRAM_Init
+      reset to the legacy weak (overridden) functions in the HAL_SRAM_Init
       and  HAL_SRAM_DeInit only when these callbacks are null (not registered beforehand).
       If not, MspInit or MspDeInit are not null, the HAL_SRAM_Init and HAL_SRAM_DeInit
       keep and use the user MspInit/MspDeInit callbacks (registered beforehand)
@@ -95,20 +106,9 @@
 
       When The compilation define USE_HAL_SRAM_REGISTER_CALLBACKS is set to 0 or
       not defined, the callback registering feature is not available
-      and weak (surcharged) callbacks are used.
+      and weak (overridden) callbacks are used.
 
   @endverbatim
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2016 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                       opensource.org/licenses/BSD-3-Clause
-  *
   ******************************************************************************
   */
 
@@ -133,9 +133,15 @@
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
+/** @addtogroup SRAM_Private_Functions SRAM Private Functions
+  * @{
+  */
 static void SRAM_DMACplt(DMA_HandleTypeDef *hdma);
 static void SRAM_DMACpltProt(DMA_HandleTypeDef *hdma);
 static void SRAM_DMAError(DMA_HandleTypeDef *hdma);
+/**
+  * @}
+  */
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -731,7 +737,7 @@ HAL_StatusTypeDef HAL_SRAM_Write_DMA(SRAM_HandleTypeDef *hsram, uint32_t *pAddre
 #if (USE_HAL_SRAM_REGISTER_CALLBACKS == 1)
 /**
   * @brief  Register a User SRAM Callback
-  *         To be used instead of the weak (surcharged) predefined callback
+  *         To be used to override the weak predefined callback
   * @param hsram : SRAM handle
   * @param CallbackId : ID of the callback to be registered
   *        This parameter can be one of the following values:
@@ -750,9 +756,6 @@ HAL_StatusTypeDef HAL_SRAM_RegisterCallback(SRAM_HandleTypeDef *hsram, HAL_SRAM_
   {
     return HAL_ERROR;
   }
-
-  /* Process locked */
-  __HAL_LOCK(hsram);
 
   state = hsram->State;
   if ((state == HAL_SRAM_STATE_READY) || (state == HAL_SRAM_STATE_RESET) || (state == HAL_SRAM_STATE_PROTECTED))
@@ -777,14 +780,12 @@ HAL_StatusTypeDef HAL_SRAM_RegisterCallback(SRAM_HandleTypeDef *hsram, HAL_SRAM_
     status =  HAL_ERROR;
   }
 
-  /* Release Lock */
-  __HAL_UNLOCK(hsram);
   return status;
 }
 
 /**
   * @brief  Unregister a User SRAM Callback
-  *         SRAM Callback is redirected to the weak (surcharged) predefined callback
+  *         SRAM Callback is redirected to the weak predefined callback
   * @param hsram : SRAM handle
   * @param CallbackId : ID of the callback to be unregistered
   *        This parameter can be one of the following values:
@@ -798,9 +799,6 @@ HAL_StatusTypeDef HAL_SRAM_UnRegisterCallback(SRAM_HandleTypeDef *hsram, HAL_SRA
 {
   HAL_StatusTypeDef status = HAL_OK;
   HAL_SRAM_StateTypeDef state;
-
-  /* Process locked */
-  __HAL_LOCK(hsram);
 
   state = hsram->State;
   if ((state == HAL_SRAM_STATE_READY) || (state == HAL_SRAM_STATE_PROTECTED))
@@ -847,14 +845,12 @@ HAL_StatusTypeDef HAL_SRAM_UnRegisterCallback(SRAM_HandleTypeDef *hsram, HAL_SRA
     status =  HAL_ERROR;
   }
 
-  /* Release Lock */
-  __HAL_UNLOCK(hsram);
   return status;
 }
 
 /**
   * @brief  Register a User SRAM Callback for DMA transfers
-  *         To be used instead of the weak (surcharged) predefined callback
+  *         To be used to override the weak predefined callback
   * @param hsram : SRAM handle
   * @param CallbackId : ID of the callback to be registered
   *        This parameter can be one of the following values:
@@ -1018,7 +1014,7 @@ HAL_StatusTypeDef HAL_SRAM_WriteOperation_Disable(SRAM_HandleTypeDef *hsram)
   *                the configuration information for SRAM module.
   * @retval HAL state
   */
-HAL_SRAM_StateTypeDef HAL_SRAM_GetState(SRAM_HandleTypeDef *hsram)
+HAL_SRAM_StateTypeDef HAL_SRAM_GetState(const SRAM_HandleTypeDef *hsram)
 {
   return hsram->State;
 }
@@ -1029,6 +1025,10 @@ HAL_SRAM_StateTypeDef HAL_SRAM_GetState(SRAM_HandleTypeDef *hsram)
 
 /**
   * @}
+  */
+
+/** @addtogroup SRAM_Private_Functions SRAM Private Functions
+  * @{
   */
 
 /**
@@ -1101,6 +1101,10 @@ static void SRAM_DMAError(DMA_HandleTypeDef *hdma)
   * @}
   */
 
+/**
+  * @}
+  */
+
 #endif /* HAL_SRAM_MODULE_ENABLED */
 
 /**
@@ -1108,5 +1112,3 @@ static void SRAM_DMAError(DMA_HandleTypeDef *hdma)
   */
 
 #endif /* FMC_BANK1 */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

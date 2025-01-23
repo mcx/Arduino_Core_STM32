@@ -854,7 +854,7 @@ typedef struct
 #define SRAM1_SIZE_MAX        (0x00008000UL) /*!< maximum SRAM1 size (up to 32 KBytes) */
 #define SRAM2_SIZE            (0x00002000UL) /*!< SRAM2 size (8 KBytes) */
 
-#define FLASH_SIZE_DATA_REGISTER ((uint32_t)0x1FFF75E0)
+#define FLASH_SIZE_DATA_REGISTER (0x1FFF75E0UL)
 
 #define FLASH_SIZE               (((((*((uint32_t *)FLASH_SIZE_DATA_REGISTER)) & (0x0000FFFFU)) == 0x0000FFFFU)) ? (0x80U << 10U) :  \
                                   (((*((uint32_t *)FLASH_SIZE_DATA_REGISTER)) & (0x0000FFFFU)) << 10U))
@@ -1069,7 +1069,7 @@ typedef struct
 /******************************************************************************/
 
 /*
- * @brief Specific device feature definitions (not present on all devices in the STM32L4 serie)
+ * @brief Specific device feature definitions (not present on all devices in the STM32L4 series)
  */
 #define ADC_MULTIMODE_SUPPORT                          /*!< ADC feature available only on specific devices: multimode available on devices with several ADC instances */
 
@@ -5601,7 +5601,7 @@ typedef struct
 /*                                                                            */
 /******************************************************************************/
 /*
-* @brief Specific device feature definitions  (not present on all devices in the STM32L4 serie)
+* @brief Specific device feature definitions  (not present on all devices in the STM32L4 series)
 */
 #define RCC_HSI48_SUPPORT
 
@@ -9565,7 +9565,7 @@ typedef struct
 /******************************************************************************/
 
 /*
-* @brief Specific device feature definitions (not present on all devices in the STM32L4 serie)
+* @brief Specific device feature definitions (not present on all devices in the STM32L4 series)
 */
 #define USART_TCBGT_SUPPORT
 

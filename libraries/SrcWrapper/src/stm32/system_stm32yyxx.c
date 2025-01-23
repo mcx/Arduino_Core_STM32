@@ -1,5 +1,3 @@
-#define USE_HAL_DRIVER
-
 #ifdef STM32C0xx
   #include "system_stm32c0xx.c"
 #elif STM32F0xx
@@ -18,6 +16,8 @@
   #include "system_stm32g0xx.c"
 #elif STM32G4xx
   #include "system_stm32g4xx.c"
+#elif STM32H5xx
+  #include "system_stm32h5xx.c"
 #elif STM32H7xx
   #include "system_stm32h7xx.c"
 #elif STM32L0xx
@@ -30,8 +30,12 @@
   #include "system_stm32l5xx_ns.c"
 #elif STM32MP1xx
   #include "system_stm32mp1xx.c"
+#elif STM32U0xx
+  #include "system_stm32u0xx.c"
 #elif STM32U5xx
   #include "system_stm32u5xx.c"
+#elif STM32WBAxx
+  #include "system_stm32wbaxx.c"
 #elif STM32WBxx
   #include "system_stm32wbxx.c"
 #elif STM32WLxx

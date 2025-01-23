@@ -1,7 +1,14 @@
-#!/bin/bash
+#!/bin/sh
 
 readonly CMSIS_VERSION="$1"
 readonly CMSIS_ARCHIVE="CMSIS-${CMSIS_VERSION}.tar.bz2"
+
+# Use python venv
+python3 -m venv "$HOME/venv"
+# shellcheck disable=SC1091
+. "$HOME/venv/bin/activate"
+# Install PlatformIO
+python3 -m pip install --quiet --upgrade platformio
 
 # Install the development version of ststm32 platform
 platformio platform install "https://github.com/platformio/platform-ststm32.git" || {

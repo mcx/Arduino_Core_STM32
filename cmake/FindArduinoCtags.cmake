@@ -3,6 +3,13 @@ include(FetchContent)
 include(FindPackageHandleStandardArgs)
 
 function(get_ctags)
+
+  # Prevent warnings in CMake>=3.24 regarding ExternalProject_Add()
+  # cf. https://cmake.org/cmake/help/latest/policy/CMP0135.html
+  if (POLICY CMP0135)
+    cmake_policy(SET CMP0135 OLD)
+  endif()
+
   cmake_host_system_information(
     RESULT HOSTINFO
     QUERY OS_NAME OS_PLATFORM
@@ -38,7 +45,7 @@ function(get_ctags)
       set(OSCODE "mingw32")
       set(ARCHIVE_EXT ".zip")
     endif()
-  elseif (${HOST_OS} STREQUAL "Darwin")
+  elseif (${HOST_OS} STREQUAL "Darwin" OR ${HOST_OS} STREQUAL "macOS")
     if(${CPUCODE} STREQUAL "x86_64")
       set(OSCODE "apple-darwin")
       set(ARCHIVE_EXT ".zip")

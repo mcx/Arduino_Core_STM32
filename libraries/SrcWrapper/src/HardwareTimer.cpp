@@ -31,9 +31,23 @@
 /* Private Defines */
 #define PIN_NOT_USED 0xFF
 #define MAX_RELOAD ((1 << 16) - 1) // Currently even 32b timers are used as 16b to have generic behavior
+#define REGULAR_CHAN_MASK 0x01
+#define COMPLEMENTARY_CHAN_MASK 0x10
 
 /* Private Variables */
 timerObj_t *HardwareTimer_Handle[TIMER_NUM] = {NULL};
+
+#if defined(HAL_FDCAN_MODULE_ENABLED) && defined(STM32G0xx) && defined(FDCAN1_BASE)
+  /* Pointer to a FDCAN_HandleTypeDef structure that contains
+  * the configuration information for the specified FDCAN.
+  * Application have to declare them properly to be able to call
+  * the HAL_FDCAN_IRQHandler().
+  */
+  extern FDCAN_HandleTypeDef *phfdcan1;
+  #if defined(FDCAN2_BASE)
+    extern FDCAN_HandleTypeDef *phfdcan2;
+  #endif
+#endif
 
 /**
   * @brief  HardwareTimer constructor: make uninitialized timer
@@ -73,9 +87,6 @@ HardwareTimer::HardwareTimer(TIM_TypeDef *instance)
 void HardwareTimer::setup(TIM_TypeDef *instance)
 {
   uint32_t index = get_timer_index(instance);
-  if (index == UNKNOWN_TIMER) {
-    Error_Handler();
-  }
 
   // Already initialized?
   if (_timerObj.handle.Instance) {
@@ -111,10 +122,8 @@ void HardwareTimer::setup(TIM_TypeDef *instance)
 
   // Initialize channel mode and complementary
   for (int i = 0; i < TIMER_CHANNELS; i++) {
-#if defined(TIM_CCER_CC1NE)
-    isComplementaryChannel[i] = false;
-#endif
-    _ChannelMode[i] = TIMER_DISABLED;
+    __ChannelsUsed[i] = 0x00;
+    _ChannelMode[i] = TIMER_OUTPUT_DISABLED;
   }
 
   /* Configure timer with some default values */
@@ -168,16 +177,13 @@ void HardwareTimer::pause()
   */
 void HardwareTimer::pauseChannel(uint32_t channel)
 {
-  int timAssociatedInputChannel;
-  int LLChannel = getLLChannel(channel);
-  if (LLChannel == -1) {
-    Error_Handler();
+  if ((channel < 1) || (channel > TIMER_CHANNELS)) {
+    return;
   }
 
-  int interrupt = getIT(channel);
-  if (interrupt == -1) {
-    Error_Handler();
-  }
+  uint32_t timAssociatedInputChannel;
+  uint32_t LLChannel = getLLChannel(channel);
+  uint32_t interrupt = getIT(channel);
 
   // Disable channel and corresponding interrupt
   __HAL_TIM_DISABLE_IT(&(_timerObj.handle), interrupt);
@@ -186,11 +192,11 @@ void HardwareTimer::pauseChannel(uint32_t channel)
   /* Starting from G4, new Channel state implementation prevents to restart a channel,
      if the channel has not been explicitly be stopped with HAL interface */
 #if defined(TIM_CHANNEL_N_STATE_SET)
-  if (isComplementaryChannel[channel - 1]) {
+  if (__ChannelsUsed[channel - 1] & COMPLEMENTARY_CHAN_MASK) {
     TIM_CHANNEL_N_STATE_SET(&(_timerObj.handle), getChannel(channel), HAL_TIM_CHANNEL_STATE_READY);
-  } else
+  }
 #endif
-  {
+  if (__ChannelsUsed[channel - 1] & REGULAR_CHAN_MASK) {
     TIM_CHANNEL_STATE_SET(&(_timerObj.handle), getChannel(channel), HAL_TIM_CHANNEL_STATE_READY);
   }
 #endif
@@ -211,140 +217,147 @@ void HardwareTimer::pauseChannel(uint32_t channel)
   */
 void HardwareTimer::resume(void)
 {
+  bool baseStart = true;
+  for (uint8_t i = 1; i <= TIMER_CHANNELS; i++) {
+    if (_ChannelMode[i - 1] != TIMER_OUTPUT_DISABLED) {
+      resumeChannel(i);
+      baseStart = false;
+    }
+  }
   // Clear flag and enable IT
   if (callbacks[0]) {
     __HAL_TIM_CLEAR_FLAG(&(_timerObj.handle), TIM_FLAG_UPDATE);
     __HAL_TIM_ENABLE_IT(&(_timerObj.handle), TIM_IT_UPDATE);
-
-    // Start timer in Time base mode. Required when there is no channel used but only update interrupt.
-    HAL_TIM_Base_Start(&(_timerObj.handle));
   }
 
-  // Resume all channels
-  resumeChannel(1);
-  resumeChannel(2);
-  resumeChannel(3);
-  resumeChannel(4);
+  // Start timer in Time base mode. Required when there is no channel used but only update interrupt.
+  if (baseStart && (!LL_TIM_IsEnabledCounter(_timerObj.handle.Instance))) {
+    HAL_TIM_Base_Start(&(_timerObj.handle));
+  }
 }
 
 /**
   * @brief  Convert arduino channel into HAL channel
   * @param  Arduino channel [1..4]
-  * @retval HAL channel. return -1 if arduino channel is invalid
+  * @retval HAL channel. Error handler called if arduino channel is invalid
   */
-int HardwareTimer::getChannel(uint32_t channel)
+uint32_t HardwareTimer::getChannel(uint32_t channel)
 {
-  uint32_t return_value;
+  uint32_t timChannel = -1;
 
   switch (channel) {
     case 1:
-      return_value = TIM_CHANNEL_1;
+      timChannel = TIM_CHANNEL_1;
       break;
     case 2:
-      return_value = TIM_CHANNEL_2;
+      timChannel = TIM_CHANNEL_2;
       break;
     case 3:
-      return_value = TIM_CHANNEL_3;
+      timChannel = TIM_CHANNEL_3;
       break;
     case 4:
-      return_value = TIM_CHANNEL_4;
+      timChannel = TIM_CHANNEL_4;
       break;
     default:
-      return_value = -1;
+      Error_Handler();
   }
-  return return_value;
+  return timChannel;
 }
 
 /**
-  * @brief  Convert arduino channel into LL channel
+  * @brief  Convert arduino channel into LL channels used (regular and/or complementary)
   * @param  Arduino channel [1..4]
-  * @retval LL channel. return -1 if arduino channel is invalid
+  * @retval LL channel. Error handler called if arduino channel is invalid
   */
-int HardwareTimer::getLLChannel(uint32_t channel)
+uint32_t HardwareTimer::getLLChannel(uint32_t channel)
 {
-  uint32_t return_value;
+  bool error = false;
+  uint32_t ll_channel = 0;
+
 #if defined(TIM_CCER_CC1NE)
-  if (isComplementaryChannel[channel - 1]) {
+  if (__ChannelsUsed[channel - 1] & COMPLEMENTARY_CHAN_MASK) {
     // Complementary channel
     switch (channel) {
       case 1:
-        return_value = LL_TIM_CHANNEL_CH1N;
+        ll_channel = LL_TIM_CHANNEL_CH1N;
         break;
       case 2:
-        return_value = LL_TIM_CHANNEL_CH2N;
+        ll_channel = LL_TIM_CHANNEL_CH2N;
         break;
       case 3:
-        return_value = LL_TIM_CHANNEL_CH3N;
+        ll_channel = LL_TIM_CHANNEL_CH3N;
         break;
 #if defined(LL_TIM_CHANNEL_CH4N)
       case 4:
-        return_value = LL_TIM_CHANNEL_CH4N;
+        ll_channel = LL_TIM_CHANNEL_CH4N;
         break;
 #endif
       default:
-        return_value = -1;
+        error = true;
     }
-  } else
+  }
 #endif
-  {
+  if ((!error) && (__ChannelsUsed[channel - 1] & REGULAR_CHAN_MASK)) {
     // Regular channel not complementary
     switch (channel) {
       case 1:
-        return_value = LL_TIM_CHANNEL_CH1;
+        ll_channel |= LL_TIM_CHANNEL_CH1;
         break;
       case 2:
-        return_value = LL_TIM_CHANNEL_CH2;
+        ll_channel |= LL_TIM_CHANNEL_CH2;
         break;
       case 3:
-        return_value = LL_TIM_CHANNEL_CH3;
+        ll_channel |= LL_TIM_CHANNEL_CH3;
         break;
       case 4:
-        return_value = LL_TIM_CHANNEL_CH4;
+        ll_channel |= LL_TIM_CHANNEL_CH4;
         break;
       default:
-        return_value = -1;
+        error = true;
     }
   }
-  return return_value;
+  if (error) {
+    Error_Handler();
+  }
+  return ll_channel;
 }
 
 /**
   * @brief  Convert arduino channel into HAL Interrupt ID
   * @param  Arduino channel [1..4]
-  * @retval HAL channel. return -1 if arduino channel is invalid
+  * @retval HAL channel. Error handler called if arduino channel is invalid
   */
-int HardwareTimer::getIT(uint32_t channel)
+uint32_t HardwareTimer::getIT(uint32_t channel)
 {
-  uint32_t return_value;
-
+  uint32_t interrupt = 0;
   switch (channel) {
     case 1:
-      return_value = TIM_IT_CC1;
+      interrupt = TIM_IT_CC1;
       break;
     case 2:
-      return_value = TIM_IT_CC2;
+      interrupt = TIM_IT_CC2;
       break;
     case 3:
-      return_value = TIM_IT_CC3;
+      interrupt = TIM_IT_CC3;
       break;
     case 4:
-      return_value = TIM_IT_CC4;
+      interrupt = TIM_IT_CC4;
       break;
     default:
-      return_value = -1;
+      Error_Handler();
   }
-  return return_value;
+  return interrupt;
 }
 
 /**
   * @brief  Get input associated channel
   *         Channel 1 and 2 are associated; channel 3 and 4 are associated
   * @param  Arduino channel [1..4]
-  * @retval HAL channel. return -1 if arduino channel is invalid
+  * @retval HAL channel. Error handler called if arduino channel is invalid
   */
-int HardwareTimer::getAssociatedChannel(uint32_t channel)
+uint32_t HardwareTimer::getAssociatedChannel(uint32_t channel)
 {
-  int timAssociatedInputChannel = -1;
+  uint32_t timAssociatedInputChannel = 0;
   switch (channel) {
     case 1:
       timAssociatedInputChannel = 2;
@@ -359,6 +372,7 @@ int HardwareTimer::getAssociatedChannel(uint32_t channel)
       timAssociatedInputChannel = 3;
       break;
     default:
+      Error_Handler();
       break;
   }
   return timAssociatedInputChannel;
@@ -371,21 +385,9 @@ int HardwareTimer::getAssociatedChannel(uint32_t channel)
   */
 void HardwareTimer::resumeChannel(uint32_t channel)
 {
-  int timChannel = getChannel(channel);
-  int timAssociatedInputChannel;
-  if (timChannel == -1) {
-    Error_Handler();
-  }
-
-  int interrupt = getIT(channel);
-  if (interrupt == -1) {
-    Error_Handler();
-  }
-
-  int LLChannel = getLLChannel(channel);
-  if (LLChannel == -1) {
-    Error_Handler();
-  }
+  uint32_t timChannel = getChannel(channel);
+  uint32_t timAssociatedInputChannel;
+  uint32_t interrupt = getIT(channel);
 
   // Clear flag and enable IT
   if (callbacks[channel]) {
@@ -397,11 +399,11 @@ void HardwareTimer::resumeChannel(uint32_t channel)
     case TIMER_OUTPUT_COMPARE_PWM1:
     case TIMER_OUTPUT_COMPARE_PWM2: {
 #if defined(TIM_CCER_CC1NE)
-        if (isComplementaryChannel[channel - 1]) {
+        if (__ChannelsUsed[channel - 1] & COMPLEMENTARY_CHAN_MASK) {
           HAL_TIMEx_PWMN_Start(&(_timerObj.handle), timChannel);
-        } else
+        }
 #endif
-        {
+        if (__ChannelsUsed[channel - 1] & REGULAR_CHAN_MASK) {
           HAL_TIM_PWM_Start(&(_timerObj.handle), timChannel);
         }
       }
@@ -412,11 +414,11 @@ void HardwareTimer::resumeChannel(uint32_t channel)
     case TIMER_OUTPUT_COMPARE_FORCED_ACTIVE:
     case TIMER_OUTPUT_COMPARE_FORCED_INACTIVE: {
 #if defined(TIM_CCER_CC1NE)
-        if (isComplementaryChannel[channel - 1]) {
+        if (__ChannelsUsed[channel - 1] & COMPLEMENTARY_CHAN_MASK) {
           HAL_TIMEx_OCN_Start(&(_timerObj.handle), timChannel);
-        } else
+        }
 #endif
-        {
+        if (__ChannelsUsed[channel - 1] & REGULAR_CHAN_MASK) {
           HAL_TIM_OC_Start(&(_timerObj.handle), timChannel);
         }
       }
@@ -439,8 +441,7 @@ void HardwareTimer::resumeChannel(uint32_t channel)
         HAL_TIM_IC_Start(&(_timerObj.handle), timChannel);
       }
       break;
-    case TIMER_OUTPUT_COMPARE:
-    case TIMER_DISABLED:
+    case TIMER_OUTPUT_DISABLED:
       if (!LL_TIM_IsEnabledCounter(_timerObj.handle.Instance)) {
         HAL_TIM_Base_Start(&(_timerObj.handle));
       }
@@ -619,9 +620,9 @@ void HardwareTimer::setCount(uint32_t counter, TimerFormat_t format)
   * @param  pin: Arduino pin number, ex: D1, 1 or PA1
   * @retval None
   */
-void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, uint32_t pin)
+void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, uint32_t pin, ChannelInputFilter_t filter)
 {
-  setMode(channel, mode, digitalPinToPinName(pin));
+  setMode(channel, mode, digitalPinToPinName(pin), filter);
 }
 
 /**
@@ -631,16 +632,12 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, uint32_t pin)
   * @param  pin: pin name, ex: PB_0
   * @retval None
   */
-void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
+void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin, ChannelInputFilter_t filter)
 {
-  int timChannel = getChannel(channel);
-  int timAssociatedInputChannel;
+  uint32_t timChannel = getChannel(channel);
+  uint32_t timAssociatedInputChannel;
   TIM_OC_InitTypeDef channelOC;
   TIM_IC_InitTypeDef channelIC;
-
-  if (timChannel == -1) {
-    Error_Handler();
-  }
 
   /* Configure some default values. Maybe overwritten later */
   channelOC.OCMode = TIMER_NOT_USED;
@@ -659,24 +656,13 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
   channelIC.ICPolarity = TIM_ICPOLARITY_RISING;
   channelIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
   channelIC.ICPrescaler = TIM_ICPSC_DIV1;
-  channelIC.ICFilter = 0;
+  channelIC.ICFilter = filter;
 
   switch (mode) {
-    case TIMER_DISABLED:
+    case TIMER_OUTPUT_DISABLED:
       channelOC.OCMode = TIM_OCMODE_TIMING;
       HAL_TIM_OC_ConfigChannel(&(_timerObj.handle), &channelOC, timChannel);
       break;
-    case TIMER_OUTPUT_COMPARE:
-      /* In case of TIMER_OUTPUT_COMPARE, there is no output and thus no pin to
-       * configure, and no channel. So nothing to do. For compatibility reason
-       * restore TIMER_DISABLED if necessary.
-       */
-      if (_ChannelMode[channel - 1] != TIMER_DISABLED) {
-        _ChannelMode[channel - 1] = TIMER_DISABLED;
-        channelOC.OCMode = TIM_OCMODE_TIMING;
-        HAL_TIM_OC_ConfigChannel(&(_timerObj.handle), &channelOC, timChannel);
-      }
-      return;
     case TIMER_OUTPUT_COMPARE_ACTIVE:
       channelOC.OCMode = TIM_OCMODE_ACTIVE;
       HAL_TIM_OC_ConfigChannel(&(_timerObj.handle), &channelOC, timChannel);
@@ -720,6 +706,10 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
       HAL_TIM_IC_ConfigChannel(&(_timerObj.handle), &channelIC, timChannel);
       break;
     case TIMER_INPUT_FREQ_DUTY_MEASUREMENT:
+      // Check if regular channel
+      if (STM_PIN_INVERTED(pinmap_function(pin, PinMap_TIM))) {
+        Error_Handler();
+      }
       // Configure 1st channel
       channelIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
       channelIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
@@ -727,6 +717,7 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
 
       // Identify and configure 2nd associated channel
       timAssociatedInputChannel = getAssociatedChannel(channel);
+      __ChannelsUsed[timAssociatedInputChannel - 1] |= REGULAR_CHAN_MASK;
       _ChannelMode[timAssociatedInputChannel - 1] = mode;
       channelIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
       channelIC.ICSelection = TIM_ICSELECTION_INDIRECTTI;
@@ -738,26 +729,25 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
 
   // Save channel selected mode to object attribute
   _ChannelMode[channel - 1] = mode;
-
-  if (pin != NC) {
-    if ((int)getTimerChannel(pin) == timChannel) {
-      /* Configure PWM GPIO pins */
-      pinmap_pinout(pin, PinMap_TIM);
+  if (mode != TIMER_OUTPUT_DISABLED) {
+    if (pin != NC) {
+      if (getTimerChannel(pin) == timChannel) {
+        /* Configure PWM GPIO pins */
+        pinmap_pinout(pin, PinMap_TIM);
 #if defined(STM32F1xx)
-      if ((mode == TIMER_INPUT_CAPTURE_RISING) || (mode == TIMER_INPUT_CAPTURE_FALLING) \
-          || (mode == TIMER_INPUT_CAPTURE_BOTHEDGE) || (mode == TIMER_INPUT_FREQ_DUTY_MEASUREMENT)) {
-        // on F1 family, input alternate function must configure GPIO in input mode
-        pinMode(pinNametoDigitalPin(pin), INPUT);
+        if ((mode == TIMER_INPUT_CAPTURE_RISING) || (mode == TIMER_INPUT_CAPTURE_FALLING) \
+            || (mode == TIMER_INPUT_CAPTURE_BOTHEDGE) || (mode == TIMER_INPUT_FREQ_DUTY_MEASUREMENT)) {
+          // on F1 family, input alternate function must configure GPIO in input mode
+          pinMode(pinNametoDigitalPin(pin), INPUT);
+        }
+#endif
+      } else {
+        // Pin doesn't match with timer output channels
+        Error_Handler();
       }
-#endif
-    } else {
-      // Pin doesn't match with timer output channels
-      Error_Handler();
-    }
 
-#if defined(TIM_CCER_CC1NE)
-    isComplementaryChannel[channel - 1] = STM_PIN_INVERTED(pinmap_function(pin, PinMap_TIM));
-#endif
+      __ChannelsUsed[channel - 1] |= (STM_PIN_INVERTED(pinmap_function(pin, PinMap_TIM))) ? COMPLEMENTARY_CHAN_MASK : REGULAR_CHAN_MASK;
+    }
   }
 }
 
@@ -768,11 +758,7 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
   */
 TimerModes_t HardwareTimer::getMode(uint32_t channel)
 {
-  if ((1 <= channel) && (channel <= TIMER_CHANNELS)) {
-    return _ChannelMode[channel - 1];
-  } else {
-    return TIMER_DISABLED;
-  }
+  return ((1 <= channel) && (channel <= TIMER_CHANNELS)) ? _ChannelMode[channel - 1] : TIMER_OUTPUT_DISABLED;
 }
 
 /**
@@ -810,13 +796,9 @@ void HardwareTimer::setPreloadEnable(bool value)
   */
 void HardwareTimer::setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format)
 {
-  int timChannel = getChannel(channel);
+  uint32_t timChannel = getChannel(channel);
   uint32_t Prescalerfactor = LL_TIM_GetPrescaler(_timerObj.handle.Instance) + 1;
   uint32_t CCR_RegisterValue;
-
-  if (timChannel == -1) {
-    Error_Handler();
-  }
 
   switch (format) {
     case MICROSEC_COMPARE_FORMAT:
@@ -876,14 +858,10 @@ void HardwareTimer::setCaptureCompare(uint32_t channel, uint32_t compare, TimerC
   */
 uint32_t HardwareTimer::getCaptureCompare(uint32_t channel,  TimerCompareFormat_t format)
 {
-  int timChannel = getChannel(channel);
+  uint32_t timChannel = getChannel(channel);
   uint32_t CCR_RegisterValue = __HAL_TIM_GET_COMPARE(&(_timerObj.handle), timChannel);
   uint32_t Prescalerfactor = LL_TIM_GetPrescaler(_timerObj.handle.Instance) + 1;
   uint32_t return_value;
-
-  if (timChannel == -1) {
-    Error_Handler();
-  }
 
   switch (format) {
     case MICROSEC_COMPARE_FORMAT:
@@ -947,7 +925,10 @@ void HardwareTimer::setPWM(uint32_t channel, uint32_t pin, uint32_t frequency, u
   */
 void HardwareTimer::setPWM(uint32_t channel, PinName pin, uint32_t frequency, uint32_t dutycycle, callback_function_t PeriodCallback, callback_function_t CompareCallback)
 {
-  setMode(channel, TIMER_OUTPUT_COMPARE_PWM1, pin);
+  TimerModes_t previousMode = getMode(channel);
+  if (previousMode != TIMER_OUTPUT_COMPARE_PWM1) {
+    setMode(channel, TIMER_OUTPUT_COMPARE_PWM1, pin);
+  }
   setOverflow(frequency, HERTZ_FORMAT);
   setCaptureCompare(channel, dutycycle, PERCENT_COMPARE_FORMAT);
   if (PeriodCallback) {
@@ -956,7 +937,9 @@ void HardwareTimer::setPWM(uint32_t channel, PinName pin, uint32_t frequency, ui
   if (CompareCallback) {
     attachInterrupt(channel, CompareCallback);
   }
-  resume();
+  if (!isRunning() || !isRunningChannel(channel) || (previousMode != TIMER_OUTPUT_COMPARE_PWM1)) {
+    resume();
+  }
 }
 
 /**
@@ -1021,10 +1004,7 @@ void HardwareTimer::detachInterrupt()
   */
 void HardwareTimer::attachInterrupt(uint32_t channel, callback_function_t callback)
 {
-  int interrupt = getIT(channel);
-  if (interrupt == -1) {
-    Error_Handler();
-  }
+  uint32_t interrupt = getIT(channel);
 
   if ((channel == 0) || (channel > (TIMER_CHANNELS + 1))) {
     Error_Handler();  // only channel 1..4 have an interrupt
@@ -1050,10 +1030,7 @@ void HardwareTimer::attachInterrupt(uint32_t channel, callback_function_t callba
   */
 void HardwareTimer::detachInterrupt(uint32_t channel)
 {
-  int interrupt = getIT(channel);
-  if (interrupt == -1) {
-    Error_Handler();
-  }
+  uint32_t interrupt = getIT(channel);
 
   if ((channel == 0) || (channel > (TIMER_CHANNELS + 1))) {
     Error_Handler();  // only channel 1..4 have an interrupt
@@ -1186,22 +1163,14 @@ bool HardwareTimer::isRunning()
   */
 bool HardwareTimer::isRunningChannel(uint32_t channel)
 {
-  int LLChannel = getLLChannel(channel);
-  int interrupt = getIT(channel);
+  uint32_t LLChannel = getLLChannel(channel);
+  uint32_t interrupt = getIT(channel);
   bool ret;
-
-  if (LLChannel == -1) {
-    Error_Handler();
-  }
-
-  if (interrupt == -1) {
-    Error_Handler();
-  }
 
   // channel is running if: timer is running, and either output channel is
   // enabled or interrupt is set
   ret = LL_TIM_CC_IsEnabledChannel(_timerObj.handle.Instance, LLChannel)
-        || (__HAL_TIM_GET_IT_SOURCE(&(_timerObj.handle), (uint32_t)interrupt) == SET);
+        || (__HAL_TIM_GET_IT_SOURCE(&(_timerObj.handle), interrupt) == SET);
   return (isRunning() && ret);
 }
 
@@ -1357,6 +1326,9 @@ timer_index_t get_timer_index(TIM_TypeDef *instance)
     index = TIMER22_INDEX;
   }
 #endif
+  if (index == UNKNOWN_TIMER) {
+    Error_Handler();
+  }
   return index;
 }
 
@@ -1383,7 +1355,7 @@ uint32_t HardwareTimer::getTimerClkFreq()
       uwAPBxPrescaler = clkconfig.APB1CLKDivider;
       uwTimclock = HAL_RCC_GetPCLK1Freq();
       break;
-#if !defined(STM32C0xx) && !defined(STM32F0xx) && !defined(STM32G0xx)
+#if !defined(STM32C0xx) && !defined(STM32F0xx) && !defined(STM32G0xx) && !defined(STM32U0xx)
     case 2:
       uwAPBxPrescaler = clkconfig.APB2CLKDivider;
       uwTimclock = HAL_RCC_GetPCLK2Freq();
@@ -1795,6 +1767,17 @@ extern "C" {
     if (HardwareTimer_Handle[TIMER16_INDEX]) {
       HAL_TIM_IRQHandler(&HardwareTimer_Handle[TIMER16_INDEX]->handle);
     }
+#if defined(HAL_FDCAN_MODULE_ENABLED) && defined(STM32G0xx) && defined(FDCAN1_BASE)
+    /* FDCAN1_IT0 and FDCAN2_IT0 Interrupt */
+    if ((phfdcan1) && (__HAL_GET_PENDING_IT(HAL_ITLINE_FDCAN1_IT0) != RESET)) {
+      HAL_FDCAN_IRQHandler(phfdcan1);
+    }
+#if defined(FDCAN2_BASE)
+    if ((phfdcan2) && (__HAL_GET_PENDING_IT(HAL_ITLINE_FDCAN2_IT0) != RESET)) {
+      HAL_FDCAN_IRQHandler(phfdcan2);
+    }
+#endif
+#endif
   }
 #endif
 #endif //TIM16_BASE
@@ -1810,6 +1793,17 @@ extern "C" {
     if (HardwareTimer_Handle[TIMER17_INDEX]) {
       HAL_TIM_IRQHandler(&HardwareTimer_Handle[TIMER17_INDEX]->handle);
     }
+#if defined(HAL_FDCAN_MODULE_ENABLED) && defined(STM32G0xx) && defined(FDCAN1_BASE)
+    /* FDCAN1_IT1 and FDCAN2_IT1 Interrupt */
+    if ((phfdcan1) && (__HAL_GET_PENDING_IT(HAL_ITLINE_FDCAN1_IT1) != RESET)) {
+      HAL_FDCAN_IRQHandler(phfdcan1);
+    }
+#if defined(FDCAN2_BASE)
+    if ((phfdcan2) && (__HAL_GET_PENDING_IT(HAL_ITLINE_FDCAN2_IT1) != RESET)) {
+      HAL_FDCAN_IRQHandler(phfdcan2);
+    }
+#endif
+#endif
   }
 #endif //TIM17_BASE
 

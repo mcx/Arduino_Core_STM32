@@ -60,18 +60,18 @@ extern "C" {
 #define LL_MAX_DELAY                  0xFFFFFFFFU
 
 /**
- * @brief Unique device ID register base address
- */
+  * @brief Unique device ID register base address
+  */
 #define UID_BASE_ADDRESS              UID_BASE
 
 /**
- * @brief Flash size data register base address
- */
+  * @brief Flash size data register base address
+  */
 #define FLASHSIZE_BASE_ADDRESS        FLASHSIZE_BASE
 
 /**
- * @brief Package data register base address
- */
+  * @brief Package data register base address
+  */
 #define PACKAGE_BASE_ADDRESS          PACKAGE_BASE
 
 /**
@@ -256,7 +256,7 @@ __STATIC_INLINE uint32_t LL_GetPackageType(void)
   * @param  HCLKFrequency HCLK frequency in Hz (can be calculated thanks to RCC helper macro or function @ref LL_RCC_GetSystemClocksFreq (HCLK1_Frequency field))
   * @note   When a RTOS is used, it is recommended to avoid changing the SysTick
   *         configuration by calling this function, for a delay use rather osDelay RTOS service.
-  * @param  Ticks Number of ticks
+  * @param  Ticks Frequency of Ticks (Hz)
   * @retval None
   */
 __STATIC_INLINE void LL_InitTick(uint32_t HCLKFrequency, uint32_t Ticks)

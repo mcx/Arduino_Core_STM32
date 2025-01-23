@@ -35,11 +35,6 @@
 // location from which to read.
 // NOTE: a "power of 2" buffer size is recommended to dramatically
 //       optimize all the modulo operations for ring buffers.
-// WARNING: When buffer sizes are increased to > 256, the buffer index
-// variables are automatically increased in size, but the extra
-// atomicity guards needed for that are not implemented. This will
-// often work, but occasionally a race condition can occur that makes
-// Serial behave erratically. See https://github.com/arduino/Arduino/issues/2405
 #if !defined(SERIAL_TX_BUFFER_SIZE)
   #define SERIAL_TX_BUFFER_SIZE 64
 #endif
@@ -125,7 +120,8 @@ class HardwareSerial : public Stream {
     virtual int peek(void);
     virtual int read(void);
     int availableForWrite(void);
-    virtual void flush(void);
+    virtual void flush();
+    void flush(uint32_t timeout);
     virtual size_t write(uint8_t);
     inline size_t write(unsigned long n)
     {
@@ -226,5 +222,8 @@ class HardwareSerial : public Stream {
 #endif
 #if defined(LPUART2)
   extern HardwareSerial SerialLP2;
+#endif
+#if defined(LPUART3)
+  extern HardwareSerial SerialLP3;
 #endif
 #endif

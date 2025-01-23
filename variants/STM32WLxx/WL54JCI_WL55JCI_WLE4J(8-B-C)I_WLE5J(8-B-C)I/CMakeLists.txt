@@ -21,7 +21,11 @@ target_link_libraries(variant INTERFACE variant_usage)
 add_library(variant_bin STATIC EXCLUDE_FROM_ALL
   generic_clock.c
   PeripheralPins.c
+  PeripheralPins_ELV_BM_TRX1.c
+  PeripheralPins_LORA_E5_MINI.c
+  variant_ELV_BM_TRX1.cpp
   variant_generic.cpp
+  variant_LORA_E5_MINI.cpp
   variant_NUCLEO_WL55JC1.cpp
 )
 target_link_libraries(variant_bin PUBLIC variant_usage)
