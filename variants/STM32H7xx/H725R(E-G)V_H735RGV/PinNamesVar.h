@@ -13,6 +13,7 @@ PA_6_ALT1  = PA_6  | ALT1,
 PA_7_ALT1  = PA_7  | ALT1,
 PA_7_ALT2  = PA_7  | ALT2,
 PA_7_ALT3  = PA_7  | ALT3,
+PA_8_ALT1  = PA_8  | ALT1,
 PA_9_ALT1  = PA_9  | ALT1,
 PA_10_ALT1 = PA_10 | ALT1,
 PA_11_ALT1 = PA_11 | ALT1,
@@ -33,9 +34,7 @@ PB_6_ALT1  = PB_6  | ALT1,
 PB_6_ALT2  = PB_6  | ALT2,
 PB_7_ALT1  = PB_7  | ALT1,
 PB_8_ALT1  = PB_8  | ALT1,
-PB_8_ALT2  = PB_8  | ALT2,
 PB_9_ALT1  = PB_9  | ALT1,
-PB_9_ALT2  = PB_9  | ALT2,
 PB_14_ALT1 = PB_14 | ALT1,
 PB_14_ALT2 = PB_14 | ALT2,
 PB_15_ALT1 = PB_15 | ALT1,
@@ -47,9 +46,7 @@ PC_1_ALT2  = PC_1  | ALT2,
 PC_4_ALT1  = PC_4  | ALT1,
 PC_5_ALT1  = PC_5  | ALT1,
 PC_6_ALT1  = PC_6  | ALT1,
-PC_6_ALT2  = PC_6  | ALT2,
 PC_7_ALT1  = PC_7  | ALT1,
-PC_7_ALT2  = PC_7  | ALT2,
 PC_9_ALT1  = PC_9  | ALT1,
 PC_10_ALT1 = PC_10 | ALT1,
 PC_11_ALT1 = PC_11 | ALT1,
@@ -72,12 +69,6 @@ PC_11_ALT1 = PC_11 | ALT1,
 #endif
 #ifdef PWR_WAKEUP_PIN6
   SYS_WKUP6 = PC_1,
-#endif
-#ifdef PWR_WAKEUP_PIN7
-  SYS_WKUP7 = NC,
-#endif
-#ifdef PWR_WAKEUP_PIN8
-  SYS_WKUP8 = NC,
 #endif
 
 /* USB */

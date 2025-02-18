@@ -176,7 +176,11 @@ HAL_StatusTypeDef HAL_UARTEx_SetRxFifoThreshold(UART_HandleTypeDef *huart, uint3
 HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size, uint16_t *RxLen,
                                            uint32_t Timeout);
 HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle_IT(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size);
+#if defined(HAL_DMA_MODULE_ENABLED)
 HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle_DMA(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size);
+#endif /* HAL_DMA_MODULE_ENABLED */
+
+HAL_UART_RxEventTypeTypeDef HAL_UARTEx_GetRxEventType(const UART_HandleTypeDef *huart);
 
 
 /**
@@ -192,6 +196,48 @@ HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle_DMA(UART_HandleTypeDef *huart, uint8_
   * @{
   */
 
+#if defined(USART4)
+#define UART_GETCLOCKSOURCE(__HANDLE__,__CLOCKSOURCE__)        \
+  do {                                                         \
+    if((__HANDLE__)->Instance == USART1)                       \
+    {                                                          \
+      switch(__HAL_RCC_GET_USART1_SOURCE())                    \
+      {                                                        \
+        case RCC_USART1CLKSOURCE_PCLK1:                        \
+          (__CLOCKSOURCE__) = UART_CLOCKSOURCE_PCLK1;          \
+          break;                                               \
+        case RCC_USART1CLKSOURCE_HSIKER:                       \
+          (__CLOCKSOURCE__) = UART_CLOCKSOURCE_HSI;            \
+          break;                                               \
+        case RCC_USART1CLKSOURCE_SYSCLK:                       \
+          (__CLOCKSOURCE__) = UART_CLOCKSOURCE_SYSCLK;         \
+          break;                                               \
+        case RCC_USART1CLKSOURCE_LSE:                          \
+          (__CLOCKSOURCE__) = UART_CLOCKSOURCE_LSE;            \
+          break;                                               \
+        default:                                               \
+          (__CLOCKSOURCE__) = UART_CLOCKSOURCE_UNDEFINED;      \
+          break;                                               \
+      }                                                        \
+    }                                                          \
+    else if((__HANDLE__)->Instance == USART2)                  \
+    {                                                          \
+      (__CLOCKSOURCE__) = UART_CLOCKSOURCE_PCLK1;              \
+    }                                                          \
+    else if((__HANDLE__)->Instance == USART3)                  \
+    {                                                          \
+      (__CLOCKSOURCE__) = UART_CLOCKSOURCE_PCLK1;              \
+    }                                                          \
+    else if((__HANDLE__)->Instance == USART4)                  \
+    {                                                          \
+      (__CLOCKSOURCE__) = UART_CLOCKSOURCE_PCLK1;              \
+    }                                                          \
+    else                                                       \
+    {                                                          \
+      (__CLOCKSOURCE__) = UART_CLOCKSOURCE_UNDEFINED;          \
+    }                                                          \
+  } while(0U)
+#else
 #define UART_GETCLOCKSOURCE(__HANDLE__,__CLOCKSOURCE__)        \
   do {                                                         \
     if((__HANDLE__)->Instance == USART1)                       \
@@ -224,6 +270,7 @@ HAL_StatusTypeDef HAL_UARTEx_ReceiveToIdle_DMA(UART_HandleTypeDef *huart, uint8_
       (__CLOCKSOURCE__) = UART_CLOCKSOURCE_UNDEFINED;          \
     }                                                          \
   } while(0U)
+#endif /* USART4 */
 
 /** @brief  Report the UART mask to apply to retrieve the received data
   *         according to the word length and to the parity bits activation.

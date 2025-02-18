@@ -3,8 +3,12 @@
 
 #include "variant.h"
 #include "HardwareSerial.h"
-#include "USBSerial.h"
-#include "VirtIOSerial.h"
+#if defined (USBCON) && defined(USBD_USE_CDC)
+  #include "USBSerial.h"
+#endif /* USBCON && USBD_USE_CDC */
+#if defined(VIRTIOCON)
+  #include "VirtIOSerial.h"
+#endif /* VIRTIOCON */
 
 #if defined (USBCON) && defined(USBD_USE_CDC)
   #ifndef DISABLE_GENERIC_SERIALUSB
@@ -51,6 +55,12 @@
       #if !defined(Serial)
         #define Serial SerialLP2
         #define serialEvent serialEventLP2
+      #endif
+    #elif SERIAL_UART_INSTANCE == 103
+      #define ENABLE_HWSERIALLP3
+      #if !defined(Serial)
+        #define Serial SerialLP3
+        #define serialEvent serialEventLP3
       #endif
     #elif SERIAL_UART_INSTANCE == 1
       #define ENABLE_HWSERIAL1
@@ -127,6 +137,11 @@
   #if defined(ENABLE_HWSERIALLP2)
     #if defined(LPUART2_BASE)
       #define HAVE_HWSERIALLP2
+    #endif
+  #endif
+  #if defined(ENABLE_HWSERIALLP3)
+    #if defined(LPUART3_BASE)
+      #define HAVE_HWSERIALLP3
     #endif
   #endif
   #if defined(ENABLE_HWSERIAL1)
@@ -215,6 +230,9 @@
   #endif
   #if defined(HAVE_HWSERIALLP2)
     extern void serialEventLP2(void) __attribute__((weak));
+  #endif
+  #if defined(HAVE_HWSERIALLP3)
+    extern void serialEventLP3(void) __attribute__((weak));
   #endif
 #endif /* HAL_UART_MODULE_ENABLED  && !HAL_UART_MODULE_ONLY */
 

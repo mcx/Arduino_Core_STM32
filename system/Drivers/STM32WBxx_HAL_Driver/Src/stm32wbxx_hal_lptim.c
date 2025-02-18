@@ -43,6 +43,9 @@
          (++) Clock: the counter clock.
              (+++) Source   : it can be either the ULPTIM input (IN1) or one of
                               the internal clock; (APB, LSE, LSI or MSI).
+                   CAUTION: if LSI2 is selected as LPTIM clock source, LSI1 has
+                            to be enabled as well (for further information please
+                            refer to errata sheet ES0394).
              (+++) Prescaler: select the clock divider.
          (++)  UltraLowPowerClock : To be used only if the ULPTIM is selected
                as counter clock source.
@@ -206,7 +209,7 @@
 #if (USE_HAL_LPTIM_REGISTER_CALLBACKS == 1)
 static void LPTIM_ResetCallback(LPTIM_HandleTypeDef *lptim);
 #endif /* USE_HAL_LPTIM_REGISTER_CALLBACKS */
-static HAL_StatusTypeDef LPTIM_WaitForFlag(LPTIM_HandleTypeDef *hlptim, uint32_t flag);
+static HAL_StatusTypeDef LPTIM_WaitForFlag(const LPTIM_HandleTypeDef *hlptim, uint32_t flag);
 
 /* Exported functions --------------------------------------------------------*/
 
@@ -368,10 +371,10 @@ HAL_StatusTypeDef HAL_LPTIM_Init(LPTIM_HandleTypeDef *hlptim)
   }
   else
   {
-    /* Check LPTIM2 Input1 source */
+    /* Check LPTIM Input1 source */
     assert_param(IS_LPTIM_INPUT1_SOURCE(hlptim->Instance, hlptim->Init.Input1Source));
 
-    /* Configure LPTIM2 Input1 source */
+    /* Configure LPTIM Input1 source */
     hlptim->Instance->OR = hlptim->Init.Input1Source;
   }
 #endif /* LPTIM_OR_OR */
@@ -2311,7 +2314,7 @@ HAL_StatusTypeDef HAL_LPTIM_UnRegisterCallback(LPTIM_HandleTypeDef        *hlpti
   * @param  hlptim LPTIM handle
   * @retval HAL state
   */
-HAL_LPTIM_StateTypeDef HAL_LPTIM_GetState(LPTIM_HandleTypeDef *hlptim)
+HAL_LPTIM_StateTypeDef HAL_LPTIM_GetState(const LPTIM_HandleTypeDef *hlptim)
 {
   /* Return LPTIM handle state */
   return hlptim->State;
@@ -2358,7 +2361,7 @@ static void LPTIM_ResetCallback(LPTIM_HandleTypeDef *lptim)
   * @param  flag   The lptim flag
   * @retval HAL status
   */
-static HAL_StatusTypeDef LPTIM_WaitForFlag(LPTIM_HandleTypeDef *hlptim, uint32_t flag)
+static HAL_StatusTypeDef LPTIM_WaitForFlag(const LPTIM_HandleTypeDef *hlptim, uint32_t flag)
 {
   HAL_StatusTypeDef result = HAL_OK;
   uint32_t count = TIMEOUT * (SystemCoreClock / 20UL / 1000UL);
@@ -2385,7 +2388,6 @@ static HAL_StatusTypeDef LPTIM_WaitForFlag(LPTIM_HandleTypeDef *hlptim, uint32_t
   */
 void LPTIM_Disable(LPTIM_HandleTypeDef *hlptim)
 {
-  uint32_t tmpclksource = 0;
   uint32_t tmpIER;
   uint32_t tmpCFGR;
   uint32_t tmpCMP;
@@ -2400,22 +2402,6 @@ void LPTIM_Disable(LPTIM_HandleTypeDef *hlptim)
   __set_PRIMASK(1) ;
 
   /*********** Save LPTIM Config ***********/
-  /* Save LPTIM source clock */
-  switch ((uint32_t)hlptim->Instance)
-  {
-    case LPTIM1_BASE:
-      tmpclksource = __HAL_RCC_GET_LPTIM1_SOURCE();
-      break;
-#if defined(LPTIM2)
-    case LPTIM2_BASE:
-      tmpclksource = __HAL_RCC_GET_LPTIM2_SOURCE();
-      break;
-#endif /* LPTIM2 */
-    default:
-      break;
-  }
-
-  /* Save LPTIM configuration registers */
   tmpIER = hlptim->Instance->IER;
   tmpCFGR = hlptim->Instance->CFGR;
   tmpCMP = hlptim->Instance->CMP;
@@ -2444,21 +2430,6 @@ void LPTIM_Disable(LPTIM_HandleTypeDef *hlptim)
   /*********** Restore LPTIM Config ***********/
   if ((tmpCMP != 0UL) || (tmpARR != 0UL))
   {
-    /* Force LPTIM source kernel clock from APB */
-    switch ((uint32_t)hlptim->Instance)
-    {
-      case LPTIM1_BASE:
-        __HAL_RCC_LPTIM1_CONFIG(RCC_LPTIM1CLKSOURCE_PCLK1);
-        break;
-#if defined(LPTIM2)
-      case LPTIM2_BASE:
-        __HAL_RCC_LPTIM2_CONFIG(RCC_LPTIM2CLKSOURCE_PCLK1);
-        break;
-#endif /* LPTIM2 */
-      default:
-        break;
-    }
-
     if (tmpCMP != 0UL)
     {
       /* Restore CMP register (LPTIM should be enabled first) */
@@ -2486,21 +2457,6 @@ void LPTIM_Disable(LPTIM_HandleTypeDef *hlptim)
       }
 
       __HAL_LPTIM_CLEAR_FLAG(hlptim, LPTIM_FLAG_ARROK);
-    }
-
-    /* Restore LPTIM source kernel clock */
-    switch ((uint32_t)hlptim->Instance)
-    {
-      case LPTIM1_BASE:
-        __HAL_RCC_LPTIM1_CONFIG(tmpclksource);
-        break;
-#if defined(LPTIM2)
-      case LPTIM2_BASE:
-        __HAL_RCC_LPTIM2_CONFIG(tmpclksource);
-        break;
-#endif /* LPTIM2 */
-      default:
-        break;
     }
   }
 
